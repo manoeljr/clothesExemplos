@@ -9,6 +9,8 @@ from decouple import config
 from schemes.users_sign_in import UserSignIn
 from response.user_sign_out import UserSignOut
 
+from passlib.context import CryptContext
+
 
 DATABASE_URL = f"postgresql://" \
                f"{config('DB_USER')}:" \
@@ -58,6 +60,7 @@ clothes = sqlalchemy.Table(
 
 
 app = FastAPI()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @app.on_event("startup")
@@ -72,6 +75,7 @@ async def shutdown():
 
 @app.post("/register/", response_model=UserSignOut)
 async def create_user(user: UserSignIn):
+    user.password = pwd_context.hash(user.password)
     query = users.insert().values(**user.dict())
     cod = await database.execute(query)
     new_user = await database.fetch_one(users.select().where(users.c.id == cod))
