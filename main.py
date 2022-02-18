@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from decouple import config
 
 
-DATABASE_URL = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@localhost:5433/clothes"
+DATABASE_URL = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{'DB_SERVER'}:{'DB_PORT'}/{'DB_DATABASE'}"
 database = databases.DatabaseURL(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 
