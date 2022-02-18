@@ -10,5 +10,6 @@ class FullNameField(str):
     def validate(cls, value):
         try:
             first_name, last_name = value.split()
+            return value
         except Exception:
             raise ValueError("You should provide at least 2 names")

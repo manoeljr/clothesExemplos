@@ -1,14 +1,13 @@
 import databases
-
-from schemes.base_user import BaseUser
-from schemes.users_sign_in import UserSignIn
-
 from enums.color_enum import ColorEnum
 from enums.size_enum import SizeEnum
 
 import sqlalchemy
 from fastapi import FastAPI
 from decouple import config
+
+from schemes.users_sign_in import UserSignIn
+from response.user_sign_out import UserSignOut
 
 
 DATABASE_URL = f"postgresql://" \
@@ -71,11 +70,12 @@ async def shutdown():
     await database.disconnect()
 
 
-@app.post("/register/")
+@app.post("/register/", response_model=UserSignOut)
 async def create_user(user: UserSignIn):
     query = users.insert().values(**user.dict())
-    id = await database.execute(query)
-    return
+    cod = await database.execute(query)
+    new_user = await database.fetch_one(users.select().where(users.c.id == cod))
+    return new_user
 
 
 
