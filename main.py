@@ -1,5 +1,8 @@
 import databases
 
+from schemes.base_user import BaseUser
+from schemes.users_sign_in import UserSignIn
+
 from enums.color_enum import ColorEnum
 from enums.size_enum import SizeEnum
 
@@ -8,8 +11,14 @@ from fastapi import FastAPI
 from decouple import config
 
 
-DATABASE_URL = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{'DB_SERVER'}:{'DB_PORT'}/{'DB_DATABASE'}"
-database = databases.DatabaseURL(DATABASE_URL)
+DATABASE_URL = f"postgresql://" \
+               f"{config('DB_USER')}:" \
+               f"{config('DB_PASSWORD')}@" \
+               f"{config('DB_SERVER')}:" \
+               f"{config('DB_PORT')}/" \
+               f"{config('DB_DATABASE')}"
+
+database = databases.Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 
 users = sqlalchemy.Table(
@@ -61,6 +70,12 @@ async def startup():
 async def shutdown():
     await database.disconnect()
 
+
+@app.post("/register/")
+async def create_user(user: UserSignIn):
+    query = users.insert().values(**user.dict())
+    id = await database.execute(query)
+    return
 
 
 
