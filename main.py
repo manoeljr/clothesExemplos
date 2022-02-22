@@ -7,9 +7,10 @@ from fastapi import FastAPI
 from decouple import config
 
 from schemes.users_sign_in import UserSignIn
-from response.user_sign_out import UserSignOut
 
 from passlib.context import CryptContext
+
+from create_tokens.create_access_token import create_access_token
 
 
 DATABASE_URL = f"postgresql://" \
@@ -58,7 +59,6 @@ clothes = sqlalchemy.Table(
     ),
 )
 
-
 app = FastAPI()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -73,19 +73,12 @@ async def shutdown():
     await database.disconnect()
 
 
-@app.post("/register/", response_model=UserSignOut)
+@app.post("/register/")
 async def create_user(user: UserSignIn):
     user.password = pwd_context.hash(user.password)
     query = users.insert().values(**user.dict())
     cod = await database.execute(query)
     new_user = await database.fetch_one(users.select().where(users.c.id == cod))
-    return new_user
-
-
-
-
-
-
-
-
-
+    token = create_access_token(new_user)
+    return {"token": token}
+    # return new_user
