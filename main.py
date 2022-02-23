@@ -1,9 +1,12 @@
+import enum
+from datetime import datetime
 from typing import Optional
 
 import databases
 import jwt
 import uvicorn
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic.main import BaseModel
 from starlette.requests import Request
 
 from enums.color_enum import ColorEnum
@@ -14,6 +17,7 @@ from fastapi import FastAPI, HTTPException, Depends
 
 from decouple import config
 
+from schemes.base_user import BaseUser
 from schemes.users_sign_in import UserSignIn
 
 from passlib.context import CryptContext
@@ -31,6 +35,13 @@ DATABASE_URL = f"postgresql://" \
 database = databases.Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 
+
+class UserRole(enum.Enum):
+    super_admin = "super admin"
+    admin = "admin"
+    user = "user"
+
+
 users = sqlalchemy.Table(
     "users",
     metadata,
@@ -47,6 +58,7 @@ users = sqlalchemy.Table(
         server_default=sqlalchemy.func.now(),
         onupdate=sqlalchemy.func.now(),
     ),
+    sqlalchemy.Column("role", sqlalchemy.Enum(UserRole), nullable=False, server_default=UserRole.user.name)
 )
 
 clothes = sqlalchemy.Table(
@@ -86,6 +98,29 @@ class CustomHttpBearer(HTTPBearer):
 oauth2_scheme = CustomHttpBearer()
 
 
+class ClothesBase(BaseModel):
+    name: str
+    color: str
+    size: SizeEnum
+    color: ColorEnum
+
+
+class ClothesIn(ClothesBase):
+    pass
+
+
+class ClothesOut(ClothesBase):
+    id: int
+    create_at: datetime
+    last_modified_at: datetime
+
+
+def is_admin(request: Request):
+    user = request.state.user
+    if not user or user["role"] not in (UserRole.admin, UserRole.super_admin):
+        raise HTTPException(403, "You do not have permissions for this resource")
+
+
 app = FastAPI()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -102,16 +137,26 @@ async def shutdown():
 
 @app.get(
     "/clothes/",
-    dependencies=[
-        Depends(oauth2_scheme)
-    ]
+    dependencies=[Depends(oauth2_scheme)]
 )
 async def get_all_clothes(request: Request):
-
     return await database.fetch_all(clothes.select())
 
 
-@app.post("/register/")
+@app.post(
+    "/clothes/",
+    response_model=ClothesOut,
+    dependencies=[Depends(oauth2_scheme), Depends(is_admin)],
+    status_code=201
+)
+async def create_clothes(clothes_data: ClothesIn):
+    id_result = await database.execute(clothes.insert().values(**clothes_data.dict()))
+    return await database.fetch_one(clothes.select().where(clothes.c.id == id_result))
+
+
+@app.post(
+    "/register/"
+)
 async def create_user(user: UserSignIn):
     user.password = pwd_context.hash(user.password)
     query = users.insert().values(**user.dict())
