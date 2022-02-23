@@ -1,9 +1,17 @@
+from typing import Optional
+
 import databases
+import jwt
+import uvicorn
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.requests import Request
+
 from enums.color_enum import ColorEnum
 from enums.size_enum import SizeEnum
 
 import sqlalchemy
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Depends
+
 from decouple import config
 
 from schemes.users_sign_in import UserSignIn
@@ -59,6 +67,25 @@ clothes = sqlalchemy.Table(
     ),
 )
 
+
+class CustomHttpBearer(HTTPBearer):
+
+    async def __call__(self, request: Request) -> Optional[HTTPAuthorizationCredentials]:
+        res = await super().__call__(request)
+        try:
+            payload = jwt.decode(res.credentials, config("JWT_SECRET"), algorithms=["HS256"])
+            user = await database.fetch_one(users.select().where(users.c.id == payload["sub"]))
+            request.state.user = user
+            return payload
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(401, "Token is expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(401, "Invalid token")
+
+
+oauth2_scheme = CustomHttpBearer()
+
+
 app = FastAPI()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -73,6 +100,17 @@ async def shutdown():
     await database.disconnect()
 
 
+@app.get(
+    "/clothes/",
+    dependencies=[
+        Depends(oauth2_scheme)
+    ]
+)
+async def get_all_clothes(request: Request):
+
+    return await database.fetch_all(clothes.select())
+
+
 @app.post("/register/")
 async def create_user(user: UserSignIn):
     user.password = pwd_context.hash(user.password)
@@ -81,4 +119,7 @@ async def create_user(user: UserSignIn):
     new_user = await database.fetch_one(users.select().where(users.c.id == cod))
     token = create_access_token(new_user)
     return {"token": token}
-    # return new_user
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
